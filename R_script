@@ -1,0 +1,257 @@
+# =============================================================================
+# Gold Price and CPI Analysis – Myanmar (2012-2022)
+# Replication of thesis: "Analyzing the Relationship Between 24 Carat Gold Price
+# and Consumer Price Index in Myanmar (2012-2022)"
+# Author: Kaung Si Thu
+# =============================================================================
+
+# Load required packages
+library(tidyverse)   # data manipulation and plotting
+library(tseries)     # ADF and PP tests
+library(urca)        # Johansen cointegration test
+library(vars)        # VAR model, lag selection, causality, serial test
+library(lmtest)      # additional diagnostics
+library(forecast)    # for auto.arima (optional)
+
+# =============================================================================
+# 1. Load and prepare data
+# =============================================================================
+# Expected CSV format: Date, GoldPrice, CPI
+# Date should be in YYYY-MM-DD format (monthly)
+data <- read.csv("myanmar_gold_cpi.csv", stringsAsFactors = FALSE)
+
+# Convert Date column to Date object and sort
+data$Date <- as.Date(data$Date)
+data <- data[order(data$Date), ]
+
+# Check for missing values
+cat("Missing values:\n")
+print(colSums(is.na(data)))
+
+# Remove any rows with missing values
+data <- na.omit(data)
+
+# Take natural log of gold price for better scaling
+data$LogGold <- log(data$GoldPrice)
+data$CPI <- data$CPI   # already an index
+
+# Create time series objects (monthly, start = first date)
+start_date <- data$Date[1]
+start_year <- as.numeric(format(start_date, "%Y"))
+start_month <- as.numeric(format(start_date, "%m"))
+
+# Convert to ts objects for easier plotting and differencing
+ts_gold <- ts(data$GoldPrice, start = c(start_year, start_month), frequency = 12)
+ts_loggold <- ts(data$LogGold, start = c(start_year, start_month), frequency = 12)
+ts_cpi <- ts(data$CPI, start = c(start_year, start_month), frequency = 12)
+
+# =============================================================================
+# 2. Descriptive statistics (Table 4.1)
+# =============================================================================
+cat("\n", paste(rep("=", 60), collapse = ""), "\n")
+cat("Descriptive Statistics (April 2012 – July 2022)\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+
+desc_stats <- data %>%
+  summarise(
+    Mean_Gold = mean(GoldPrice),
+    Median_Gold = median(GoldPrice),
+    SD_Gold = sd(GoldPrice),
+    Skew_Gold = skewness(GoldPrice),
+    Kurt_Gold = kurtosis(GoldPrice),
+    Min_Gold = min(GoldPrice),
+    Max_Gold = max(GoldPrice),
+    Mean_CPI = mean(CPI),
+    Median_CPI = median(CPI),
+    SD_CPI = sd(CPI),
+    Skew_CPI = skewness(CPI),
+    Kurt_CPI = kurtosis(CPI),
+    Min_CPI = min(CPI),
+    Max_CPI = max(CPI)
+  )
+
+# Helper functions for skewness and kurtosis (if not already in psych package)
+skewness <- function(x) {
+  n <- length(x)
+  m3 <- sum((x - mean(x))^3) / n
+  s3 <- sd(x)^3
+  m3 / s3
+}
+kurtosis <- function(x) {
+  n <- length(x)
+  m4 <- sum((x - mean(x))^4) / n
+  s4 <- sd(x)^4
+  m4 / s4 - 3   # excess kurtosis
+}
+
+desc_stats <- data %>%
+  summarise(
+    Mean_Gold = mean(GoldPrice),
+    Median_Gold = median(GoldPrice),
+    SD_Gold = sd(GoldPrice),
+    Skew_Gold = skewness(GoldPrice),
+    Kurt_Gold = kurtosis(GoldPrice),
+    Min_Gold = min(GoldPrice),
+    Max_Gold = max(GoldPrice),
+    Mean_CPI = mean(CPI),
+    Median_CPI = median(CPI),
+    SD_CPI = sd(CPI),
+    Skew_CPI = skewness(CPI),
+    Kurt_CPI = kurtosis(CPI),
+    Min_CPI = min(CPI),
+    Max_CPI = max(CPI)
+  )
+print(round(desc_stats, 2))
+
+# =============================================================================
+# 3. Time series plots (Figures 4.1 & 4.2)
+# =============================================================================
+par(mfrow = c(2, 1), mar = c(4, 4, 2, 1))
+plot(ts_gold, main = "24 Carat Gold Price (Kyats per ounce)",
+     ylab = "Kyats/ounce", col = "darkgoldenrod", lwd = 2)
+grid()
+plot(ts_cpi, main = "Consumer Price Index (CPI)",
+     ylab = "Index", col = "steelblue", lwd = 2)
+grid()
+par(mfrow = c(1, 1))
+
+# Optionally save as PNG
+# png("gold_cpi_trends.png", width = 800, height = 600)
+# ... (plots)
+# dev.off()
+
+# =============================================================================
+# 4. Unit root tests (ADF & PP) at level and first difference
+# =============================================================================
+cat("\n", paste(rep("=", 60), collapse = ""), "\n")
+cat("Unit Root Tests at Level\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+
+# Augmented Dickey-Fuller test
+adf_gold <- adf.test(ts_loggold, alternative = "stationary")
+adf_cpi <- adf.test(ts_cpi, alternative = "stationary")
+
+cat("\n--- Log Gold Price ---\n")
+print(adf_gold)
+cat("\n--- CPI ---\n")
+print(adf_cpi)
+
+# Phillips-Perron test (from tseries package)
+pp_gold <- pp.test(ts_loggold, alternative = "stationary")
+pp_cpi <- pp.test(ts_cpi, alternative = "stationary")
+
+cat("\n--- Phillips-Perron Test ---\n")
+cat("Log Gold:\n")
+print(pp_gold)
+cat("CPI:\n")
+print(pp_cpi)
+
+# First differencing
+d_loggold <- diff(ts_loggold)
+d_cpi <- diff(ts_cpi)
+
+cat("\n", paste(rep("=", 60), collapse = ""), "\n")
+cat("Unit Root Tests at First Difference\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+
+adf_dgold <- adf.test(d_loggold, alternative = "stationary")
+adf_dcpi <- adf.test(d_cpi, alternative = "stationary")
+cat("\n--- Δ Log Gold Price ---\n")
+print(adf_dgold)
+cat("\n--- Δ CPI ---\n")
+print(adf_dcpi)
+
+pp_dgold <- pp.test(d_loggold, alternative = "stationary")
+pp_dcpi <- pp.test(d_cpi, alternative = "stationary")
+cat("\n--- Phillips-Perron on differences ---\n")
+cat("Δ Log Gold:\n")
+print(pp_dgold)
+cat("Δ CPI:\n")
+print(pp_dcpi)
+
+# =============================================================================
+# 5. Johansen cointegration test (on levels)
+# =============================================================================
+# Combine the two series into a matrix for urca
+johansen_data <- cbind(ts_loggold, ts_cpi)
+# Use a lag length of 2 (as in thesis) and include a constant in the cointegration equation
+# Note: k = lag order in the VAR (i.e., number of lags of differences) – here we choose 2 based on earlier selection
+# The thesis uses 2 lags in the VAR; for Johansen, we set K = 2 (lag order for the VAR)
+coint_test <- ca.jo(johansen_data, type = "trace", ecdet = "const", K = 2, spec = "longrun")
+
+cat("\n", paste(rep("=", 60), collapse = ""), "\n")
+cat("Johansen Cointegration Test\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+summary(coint_test)
+
+# =============================================================================
+# 6. Optimal lag length selection for VAR (using stationary series)
+# =============================================================================
+# Use differenced data (both I(1) and not cointegrated)
+var_data <- cbind(d_loggold, d_cpi)
+
+# Lag selection criteria up to 12 lags
+lag_select <- VARselect(var_data, lag.max = 12, type = "const")
+cat("\n", paste(rep("=", 60), collapse = ""), "\n")
+cat("Lag Length Selection (VAR on first differences)\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+print(lag_select$criteria)
+cat("\nSelected lag by AIC: ", lag_select$selection["AIC(n)"], "\n")
+
+# We'll use the lag suggested by AIC (or the majority from thesis: 2)
+p <- 2   # as per thesis (Table 4.4)
+cat("Using lag = ", p, " (based on thesis)\n")
+
+# =============================================================================
+# 7. Estimate VAR model on stationary data
+# =============================================================================
+var_est <- VAR(var_data, p = p, type = "const")
+cat("\n", paste(rep("=", 60), collapse = ""), "\n")
+cat("VAR(2) Model Estimation\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+summary(var_est)
+
+# =============================================================================
+# 8. Stability check (eigenvalues of companion matrix)
+# =============================================================================
+roots <- roots(var_est)
+cat("\n", paste(rep("=", 60), collapse = ""), "\n")
+cat("Stability Check – Inverse Roots of Characteristic Polynomial\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+print(roots)
+cat("All moduli < 1? ", all(Mod(roots) < 1), "\n")
+if(all(Mod(roots) < 1)) cat("=> Model is stable\n") else cat("=> Model is unstable\n")
+
+# =============================================================================
+# 9. Residual diagnostics: LM test for autocorrelation
+# =============================================================================
+cat("\n", paste(rep("=", 60), collapse = ""), "\n")
+cat("LM Test for Residual Autocorrelation (up to lag 5)\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+serial_test <- serial.test(var_est, lags.pt = 5, type = "PT.asymptotic")
+print(serial_test)
+
+# =============================================================================
+# 10. Granger causality tests (Table 4.10)
+# =============================================================================
+cat("\n", paste(rep("=", 60), collapse = ""), "\n")
+cat("Granger Causality Tests\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+
+# Test if d_loggold Granger-causes d_cpi
+causality_gold_to_cpi <- causality(var_est, cause = "d_loggold")
+cat("\nH0: Gold price does NOT Granger-cause CPI\n")
+print(causality_gold_to_cpi$Granger)
+
+# Test if d_cpi Granger-causes d_loggold
+causality_cpi_to_gold <- causality(var_est, cause = "d_cpi")
+cat("\nH0: CPI does NOT Granger-cause gold price\n")
+print(causality_cpi_to_gold$Granger)
+
+# =============================================================================
+# 11. Additional: Impulse response analysis (optional)
+# =============================================================================
+# irf <- irf(var_est, impulse = "d_loggold", response = "d_cpi", n.ahead = 10, boot = TRUE)
+# plot(irf)
+
+cat("\nAnalysis complete.\n")
