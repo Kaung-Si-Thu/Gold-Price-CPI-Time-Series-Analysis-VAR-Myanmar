@@ -9,7 +9,7 @@ This repository contains the code and analysis for a time series econometric stu
 Gold price, Consumer Price Index, CPI, Myanmar, VAR, time series analysis, econometrics
 
 ## Full Thesis
-The full thesis is available via Zenodo: [Download PDF](https://doi.org/10.5281/zenodo.19190323)
+The full thesis is available here: [Download PDF](https://doi.org/10.5281/zenodo.19190323)
 
 ## Citation
 KAUNG SI THU. *Analyzing the Relationship Between 24 Carat Gold Price and Consumer Price Index in Myanmar.* Zenodo. DOI: [10.5281/zenodo.19190323](https://doi.org/10.5281/zenodo.19190323)
